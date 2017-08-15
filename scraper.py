@@ -10,9 +10,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 
 
-
-#### FUNCTIONS 1.2
-import requests    # import requests to validate url
+#### FUNCTIONS 1.0
 
 def validateFilename(filename):
     filenameregex = '^[a-zA-Z0-9]+_[a-zA-Z0-9]+_[a-zA-Z0-9]+_[0-9][0-9][0-9][0-9]_[0-9QY][0-9]$'
@@ -40,19 +38,19 @@ def validateFilename(filename):
 
 def validateURL(url):
     try:
-        r = requests.get(url, allow_redirects=True, timeout=20)
+        r = urllib2.urlopen(url)
         count = 1
-        while r.status_code == 500 and count < 4:
+        while r.getcode() == 500 and count < 4:
             print ("Attempt {0} - Status code: {1}. Retrying.".format(count, r.status_code))
             count += 1
-            r = requests.get(url, allow_redirects=True, timeout=20)
-        sourceFilename = r.headers.get('Content-Disposition')
-        if sourceFilename:
-            ext = os.path.splitext(sourceFilename)[1].replace('"', '').replace(';', '').replace(' ', '')
+            r = urllib2.urlopen(url)
+        sourceFilename = r.headers.get('Content-Type')
+        if 'csv' in sourceFilename:
+            ext = '.'+sourceFilename.split('/')[-1]
         else:
             ext = os.path.splitext(url)[1]
-        validURL = r.status_code == 200
-        validFiletype = ext in ['.csv', '.xls', '.xlsx']
+        validURL = r.getcode() == 200
+        validFiletype = ext.lower() in ['.csv', '.xls', '.xlsx', '.pdf']
         return validURL, validFiletype
     except:
         print ("Error validating URL.")
@@ -86,8 +84,8 @@ def convert_mth_strings ( mth_string ):
 
 #### VARIABLES 1.0
 
-entity_id = "E4210_WMBC_gov"
-url = "https://www.wigan.gov.uk/Council/DataProtection-FOI-Stats/Spending-and-Finance-data.aspx"
+entity_id = "FTRX2X_SPNFT_gov"
+url = "http://www.sussexpartnership.nhs.uk/expenditure-over-ps25k"
 errors = 0
 data = []
 
@@ -95,34 +93,19 @@ data = []
 #### READ HTML 1.0
 
 html = urllib2.urlopen(url)
-soup = BeautifulSoup(html, 'lxml')
+soup = BeautifulSoup(html, "lxml")
+
 
 #### SCRAPE DATA
 
-pat = re.compile('\d{4}')
-block = soup.find('div', attrs = {'id':'L3_MainContentPlaceholder'}).find_all_next('ul')
-for b in block:
-    links = b.find_all('a')
-    for link in links:
-        if 'Spend' in link.text:
-            if '.csv' in link['href']:
-                url = 'https://www.wigan.gov.uk' + link['href']
-                csvMth = link.text.strip().split('-')[-1].strip().split('(')[0].strip()[:3]
-                csvYr = link.text.strip().split('-')[-1].strip().split('(')[0].strip()[-4:]
-                csvMth = convert_mth_strings(csvMth.upper())
-                todays_date = str(datetime.now())
-                if len(link.text.split('-')) > 2:
-                    tys = pat.findall(link.text)
-                    if len(tys) > 1:
-                        if int(tys[0]) < int(tys[1]):
-                            csvMth = 'Y1'
-                        if int(tys[0]) == int(tys[1]):
-                            csvMth = 'Q0'
-                    if len(tys) == 1:
-                        csvMth = 'Q0'
-                else:
-                    csvMth = 'Q0'
-                data.append([csvYr, csvMth, url])
+links = soup.find('section', 'document-list document-list-2465').find_all('li', 'document-list-item csv')
+for link in links:
+    url = link.find('a')['href']
+    title = link.find('a')['title'].strip().split()
+    csvMth = title[-2][:3]
+    csvYr = title[-1]
+    csvMth = convert_mth_strings(csvMth.upper())
+    data.append([csvYr, csvMth, url])
 
 
 #### STORE DATA 1.0
